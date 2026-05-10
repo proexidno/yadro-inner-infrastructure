@@ -1,0 +1,90 @@
+
+PLAY [Install Docker and validate Python script in container] ******************
+
+TASK [Gathering Facts] *********************************************************
+ok: [target-host]
+
+TASK [Update apt cache] ********************************************************
+ok: [target-host]
+
+TASK [Ensure dependencies are installed] ***************************************
+ok: [target-host]
+
+TASK [Create Docker GPG key directory] *****************************************
+ok: [target-host]
+
+TASK [Download Docker's official GPG key] **************************************
+changed: [target-host]
+
+TASK [Get Ubuntu Codename] *****************************************************
+ok: [target-host]
+
+TASK [Get System Architecture] *************************************************
+ok: [target-host]
+
+TASK [Add Docker repository] ***************************************************
+changed: [target-host]
+
+TASK [Update apt cache after adding Docker repository] *************************
+changed: [target-host]
+
+TASK [Install Docker and Docker Compose] ***************************************
+changed: [target-host]
+
+TASK [Ensure Docker service is enabled and started] ****************************
+ok: [target-host]
+
+TASK [Add ubuntu user to docker group] *****************************************
+changed: [target-host]
+
+TASK [Verify Docker installation] **********************************************
+ok: [target-host]
+
+TASK [Show Docker version] *****************************************************
+ok: [target-host] => {
+    "docker_version.stdout": "Docker version 29.4.3, build 055a478"
+}
+
+TASK [Create build directory on REMOTE host] ***********************************
+changed: [target-host]
+
+TASK [Copy project files to REMOTE host] ***************************************
+changed: [target-host] => (item=Dockerfile)
+changed: [target-host] => (item=requirements.txt)
+changed: [target-host] => (item=status.py)
+
+TASK [Build Docker image] ******************************************************
+changed: [target-host]
+
+TASK [Run container with test script] ******************************************
+changed: [target-host]
+
+TASK [Capture container logs] **************************************************
+ok: [target-host]
+
+TASK [Display script output] ***************************************************
+ok: [target-host] => {
+    "msg": [
+        "200: 200 OK",
+        "301: 301 Moved Permanently",
+        "HTTP Error 404: 404 Not Found",
+        "HTTP Error 501: 501 Not Implemented",
+        "201: 201 Created"
+    ]
+}
+
+TASK [Cleanup test container] **************************************************
+ok: [target-host]
+
+TASK [Cleanup build directory] *************************************************
+changed: [target-host]
+
+TASK [Assert script executed successfully] *************************************
+ok: [target-host] => {
+    "changed": false,
+    "msg": "Script completed (exit code 0)"
+}
+
+PLAY RECAP *********************************************************************
+target-host                : ok=23   changed=10   unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
