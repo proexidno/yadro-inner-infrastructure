@@ -1,0 +1,5 @@
+200: 200 OK
+301: 301 Moved Permanently
+HTTP Error 404: 404 Not Found
+HTTP Error 501: 501 Not Implemented
+201: 201 Created

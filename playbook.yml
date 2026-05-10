@@ -1,0 +1,145 @@
+- name: Install Docker and validate Python script in container
+  hosts: all
+  become: true
+  gather_facts: yes
+
+  vars:
+    image_name: "status-checker"
+    container_name: "status-test-{{ ansible_date_time.epoch }}"
+    test_url: "https://httpstat.us"
+    build_path: "/tmp/ansible-build-{{ ansible_date_time.epoch }}"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Ensure dependencies are installed
+      ansible.builtin.package:
+        name:
+          - curl
+          - ca-certificates
+        state: present
+
+    - name: Create Docker GPG key directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Docker's official GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Get Ubuntu Codename
+      ansible.builtin.shell: ". /etc/os-release && echo ${UBUNTU_CODENAME:-$VERSION_CODENAME}"
+      register: ubuntu_codename
+      changed_when: false
+
+    - name: Get System Architecture
+      ansible.builtin.command: dpkg --print-architecture
+      register: sys_arch
+      changed_when: false
+
+    - name: Add Docker repository
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.sources
+        content: |
+          Types: deb
+          URIs: https://download.docker.com/linux/ubuntu
+          Suites: {{ ubuntu_codename.stdout }}
+          Components: stable
+          Architectures: {{ sys_arch.stdout }}
+          Signed-By: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+      register: docker_repo_added
+
+    - name: Update apt cache after adding Docker repository
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install Docker and Docker Compose
+      ansible.builtin.package:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Ensure Docker service is enabled and started
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Verify Docker installation
+      ansible.builtin.command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Show Docker version
+      ansible.builtin.debug:
+        var: docker_version.stdout
+
+    - name: Create build directory on REMOTE host
+      ansible.builtin.file:
+        path: "{{ build_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy project files to REMOTE host
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ build_path }}/{{ item }}"
+        mode: "0644"
+      loop: [Dockerfile, requirements.txt, status.py]
+
+    - name: Build Docker image
+      ansible.builtin.command:
+        cmd: "docker build -t {{ image_name }}:latest {{ build_path }}"
+      register: build_result
+      changed_when: "'Successfully tagged' in build_result.stdout or build_result.rc == 0"
+
+    - name: Run container with test script
+      ansible.builtin.command:
+        cmd: "docker run --name {{ container_name }} {{ image_name }}:latest {{ test_url }}"
+      register: run_result
+      failed_when: false
+
+    - name: Capture container logs
+      ansible.builtin.command:
+        cmd: "docker logs {{ container_name }}"
+      register: logs_result
+      changed_when: false
+
+    - name: Display script output
+      ansible.builtin.debug:
+        msg: "{{ logs_result.stdout_lines }}"
+
+    - name: Cleanup test container
+      ansible.builtin.command:
+        cmd: "docker rm -f {{ container_name }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Cleanup build directory
+      ansible.builtin.file:
+        path: "{{ build_path }}"
+        state: absent
+
+    - name: Assert script executed successfully
+      ansible.builtin.assert:
+        that:
+          - run_result.rc == 0
+        fail_msg: "Script exited with code {{ run_result.rc }}\nLogs: {{ logs_result.stdout }}"
+        success_msg: "Script completed (exit code 0)"
